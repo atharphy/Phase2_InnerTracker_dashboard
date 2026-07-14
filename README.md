@@ -9,7 +9,7 @@ The dashboard is generated automatically from detector geometry YAML files and J
 # Directory Structure
 
 ```
-innertracker_dashboard/
+inner_tracker_dashboard/
 │
 ├── generate_dashboard.py
 ├── generate_dashboard_chip_details.py
