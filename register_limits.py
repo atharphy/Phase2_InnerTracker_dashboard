@@ -1,79 +1,70 @@
-#!/usr/bin/env python3
+# Auto-generated from current Prometheus values
+# Nominal value = average across currently visible chips
+# Limits = nominal +/- 20%
 
-import json
-import urllib.parse
-import urllib.request
-from pathlib import Path
-from statistics import mean
+REGISTER_LIMITS = {
+    "ANA_IN_CURR": {
+        "unit": "uA",
+        "nominal": 758011,
+        "min": 606409,
+        "max": 909613,
+        "margin": 0.2,
+    },
 
-PROMETHEUS_URL = "http://localhost:9090"
-OUTPUT = "register_limits.py"
-MARGIN = 0.20
+    "DIG_IN_CURR": {
+        "unit": "uA",
+        "nominal": 625396,
+        "min": 500317,
+        "max": 750475,
+        "margin": 0.2,
+    },
 
+    "INTERNAL_NTC_ABS": {
+        "unit": "C",
+        "nominal": 19.6502,
+        "min": None,
+        "max": 20.0,
+        "margin": 0.2,
+    },
 
-def prom_query(query):
-    params = urllib.parse.urlencode({"query": query})
-    url = f"{PROMETHEUS_URL}/api/v1/query?{params}"
+    "INTERNAL_NTC_REL": {
+        "unit": "C",
+        "nominal": 20.6917,
+        "min": None,
+        "max": 20.0,
+        "margin": 0.2,
+    },
 
-    with urllib.request.urlopen(url) as response:
-        data = json.load(response)
+    "Iref": {
+        "unit": "uA",
+        "nominal": 3.51325,
+        "min": 2.8106,
+        "max": 4.2159,
+        "margin": 0.2,
+    },
 
-    if data.get("status") != "success":
-        raise RuntimeError(data)
+    "VDDA": {
+        "unit": "V",
+        "nominal": 1.1835,
+        "min": 0.9468,
+        "max": 1.4202,
+        "margin": 0.2,
+    },
 
-    return data["data"]["result"]
+    "VINA": {
+        "unit": "V",
+        "nominal": 1.253,
+        "min": 1.0024,
+        "max": 1.5036,
+        "margin": 0.2,
+    },
 
+    "VIND": {
+        "unit": "V",
+        "nominal": 1.249,
+        "min": 0.9992,
+        "max": 1.4988,
+        "margin": 0.2,
+    },
 
-def main():
-    result = prom_query("cmsit_monitor_value")
-
-    values = {}
-
-    for item in result:
-        metric = item["metric"]
-        register = metric.get("register")
-        unit = metric.get("unit", "")
-        value = float(item["value"][1])
-
-        if not register:
-            continue
-
-        values.setdefault(register, {"unit": unit, "values": []})
-        values[register]["values"].append(value)
-
-    lines = []
-    lines.append("# Auto-generated from current Prometheus values")
-    lines.append("# Nominal value = average across currently visible chips")
-    lines.append("# Limits = nominal +/- 20%")
-    lines.append("")
-    lines.append("REGISTER_LIMITS = {")
-
-    for register in sorted(values):
-        vals = values[register]["values"]
-        unit = values[register]["unit"]
-        nominal = mean(vals)
-        low = nominal * (1.0 - MARGIN)
-        high = nominal * (1.0 + MARGIN)
-
-        lines.append(f'    "{register}": {{')
-        lines.append(f'        "unit": "{unit}",')
-        lines.append(f'        "nominal": {nominal:.6g},')
-        lines.append(f'        "min": {low:.6g},')
-        lines.append(f'        "max": {high:.6g},')
-        lines.append(f'        "margin": {MARGIN},')
-        lines.append("    },")
-        lines.append("")
-
-    lines.append("}")
-
-    Path(OUTPUT).write_text("\n".join(lines))
-    print(f"Wrote {OUTPUT}")
-
-    for register in sorted(values):
-        info = values[register]
-        nominal = mean(info["values"])
-        print(f"{register:25s} nominal={nominal:.6g} {info['unit']}")
-
-
-if __name__ == "__main__":
-    main()
+}
