@@ -4,19 +4,15 @@ import json
 from pathlib import Path
 
 from config import (
-    OUTPUT,
+    REGISTERS,
     BARREL_GEOMETRY_FILE,
     FORWARD_GEOMETRY_FILE,
     ENDCAP_GEOMETRY_FILE,
 )
 
-from geometry import (
-    load_all_geometry,
-)
+from geometry import load_all_geometry
 
-from panels import (
-    make_dashboard,
-)
+from panels import make_dashboard
 
 
 def main() -> None:
@@ -27,21 +23,28 @@ def main() -> None:
         endcap_geometry,
     ) = load_all_geometry()
 
-    dashboard = make_dashboard(
-        barrel_geometry,
-        forward_geometry,
-        endcap_geometry,
-    )
+    for register in REGISTERS:
 
-    Path(OUTPUT).write_text(
-        json.dumps(
-            dashboard,
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
+        dashboard = make_dashboard(
+            register,
+            barrel_geometry,
+            forward_geometry,
+            endcap_geometry,
+        )
 
-    print(f"Wrote {OUTPUT}")
+        output = (
+            f"cmsit_{register.lower()}_dashboard.json"
+        )
+
+        Path(output).write_text(
+            json.dumps(
+                dashboard,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+        print(f"Wrote {output}")
 
     print(
         "Loaded geometry files:\n"

@@ -6,12 +6,9 @@ from config import (
     ECHARTS_PANEL_TYPE,
     GRAFANA_VERSION,
     BUSINESS_CHARTS_VERSION,
-    REGISTERS,
     FORWARD_LAYOUT,
     ENDCAP_LAYOUT,
     FRESHNESS_SECONDS,
-    DASHBOARD_UID,
-    DASHBOARD_TITLE,
 )
 
 from templates import (
@@ -37,28 +34,29 @@ def fresh_expr(register: str) -> str:
     )
 
 
-# Limits table
 
-def make_limits_table(panel_id: int, y: int):
+def make_limits_table(
+    register: str,
+    panel_id: int,
+    y: int,
+):
+    info = REGISTER_LIMITS.get(register, {})
 
     text = "| Register | Nominal | Min | Max | Unit |\n"
     text += "|---|---:|---:|---:|---|\n"
 
-    for register in REGISTERS:
-        info = REGISTER_LIMITS.get(register, {})
-
-        text += (
-            f"| {register} | "
-            f"{info.get('nominal', '')} | "
-            f"{info.get('min', '')} | "
-            f"{info.get('max', '')} | "
-            f"{info.get('unit', '')} |\n"
-        )
+    text += (
+        f"| {register} | "
+        f"{info.get('nominal', '')} | "
+        f"{info.get('min', '')} | "
+        f"{info.get('max', '')} | "
+        f"{info.get('unit', '')} |\n"
+    )
 
     return {
         "id": panel_id,
         "type": "text",
-        "title": "Register Limits",
+        "title": f"{register} Limits",
         "pluginVersion": GRAFANA_VERSION,
         "gridPos": {
             "x": 0,
@@ -72,8 +70,9 @@ def make_limits_table(panel_id: int, y: int):
         },
     }
 
-def panel_target(register):
+# Prometheus panel target
 
+def panel_target(register: str):
     return {
         "refId": "A",
         "datasource": {
@@ -90,15 +89,14 @@ def panel_target(register):
 
 def make_echarts_panel(
     *,
-    panel_id,
-    y,
-    height,
-    title,
-    code,
-    register,
-    description,
+    panel_id: int,
+    y: int,
+    height: int,
+    title: str,
+    code: str,
+    register: str,
+    description: str,
 ):
-
     return {
         "id": panel_id,
         "type": ECHARTS_PANEL_TYPE,
@@ -126,107 +124,127 @@ def make_echarts_panel(
     }
 
 
-
 def make_dashboard(
+    register: str,
     barrel_geometry,
     forward_geometry,
     endcap_geometry,
 ):
-
     panels = []
 
     panel_id = 1
     y = 0
 
-    panels.append(make_limits_table(panel_id, y))
+    unit = REGISTER_LIMITS.get(
+        register,
+        {},
+    ).get("unit", "")
+
+    # Limits table
+
+    panels.append(
+        make_limits_table(
+            register,
+            panel_id,
+            y,
+        )
+    )
 
     panel_id += 1
     y += 4
 
-    for register in REGISTERS:
+    # Barrel
 
-        unit = REGISTER_LIMITS.get(
-            register,
-            {},
-        ).get("unit", "")
+    panels.append(
+        make_echarts_panel(
+            panel_id=panel_id,
+            y=y,
+            height=60,
+            title=(
+                f"{register} Barrel detector map "
+                f"[{unit}]"
+            ),
+            code=barrel_echarts_code(
+                register,
+                barrel_geometry,
+            ),
+            register=register,
+            description=(
+                "Four Barrel layer plots. "
+                "Layers 1 and 2 use double modules; "
+                "Layers 3 and 4 use quad modules."
+            ),
+        )
+    )
 
-        # Barrel
+    panel_id += 1
+    y += 60
 
+    # Forward +z and -z
+
+    for side in ("+z", "-z"):
         panels.append(
             make_echarts_panel(
                 panel_id=panel_id,
                 y=y,
-                height=60,
-                title=f"{register} Barrel detector map [{unit}]",
-                code=barrel_echarts_code(
+                height=32,
+                title=(
+                    f"{register} Forward {side} "
+                    f"detector map [{unit}]"
+                ),
+                code=ring_echarts_code(
                     register,
-                    barrel_geometry,
+                    forward_geometry,
+                    FORWARD_LAYOUT,
+                    "Forward",
+                    side,
                 ),
                 register=register,
                 description=(
-                    "Four Barrel layer plots. "
-                    "Layers 1 and 2 use double modules; "
-                    "Layers 3 and 4 use quad modules."
+                    f"Eight Forward disks on the {side} "
+                    "side of the interaction point."
                 ),
             )
         )
 
         panel_id += 1
-        y += 60
+        y += 32
 
-        # Forward
+    # Endcap +z and -z
 
-        for side in ("+z", "-z"):
-
-            panels.append(
-                make_echarts_panel(
-                    panel_id=panel_id,
-                    y=y,
-                    height=32,
-                    title=f"{register} Forward {side} detector map [{unit}]",
-                    code=ring_echarts_code(
-                        register,
-                        forward_geometry,
-                        FORWARD_LAYOUT,
-                        "Forward",
-                        side,
-                    ),
-                    register=register,
-                    description=(
-                        "Eight Forward disks."
-                    ),
-                )
+    for side in ("+z", "-z"):
+        panels.append(
+            make_echarts_panel(
+                panel_id=panel_id,
+                y=y,
+                height=34,
+                title=(
+                    f"{register} Endcap {side} "
+                    f"detector map [{unit}]"
+                ),
+                code=ring_echarts_code(
+                    register,
+                    endcap_geometry,
+                    ENDCAP_LAYOUT,
+                    "Endcap",
+                    side,
+                ),
+                register=register,
+                description=(
+                    f"Four Endcap disks on the {side} "
+                    "side of the interaction point."
+                ),
             )
+        )
 
-            panel_id += 1
-            y += 32
+        panel_id += 1
+        y += 34
 
-        # Endcap
-
-        for side in ("+z", "-z"):
-
-            panels.append(
-                make_echarts_panel(
-                    panel_id=panel_id,
-                    y=y,
-                    height=34,
-                    title=f"{register} Endcap {side} detector map [{unit}]",
-                    code=ring_echarts_code(
-                        register,
-                        endcap_geometry,
-                        ENDCAP_LAYOUT,
-                        "Endcap",
-                        side,
-                    ),
-                    register=register,
-                    description=(
-                        "Four Endcap disks."
-                    ),
-                )
-            )
-
-            panel_id += 1
-            y += 34
+    dashboard_slug = (
+        register
+        .lower()
+        .replace("_", "-")
+    )
 
     return {
         "annotations": {
@@ -236,11 +254,12 @@ def make_dashboard(
         "fiscalYearStartMonth": 0,
         "graphTooltip": 0,
         "id": None,
-        "uid": DASHBOARD_UID,
-        "title": DASHBOARD_TITLE,
+        "uid": f"cmsit-{dashboard_slug}-geometry",
+        "title": f"CMSIT {register} Full Pixel Geometry",
         "tags": [
             "cmsit",
             "rd53",
+            register.lower(),
             "barrel",
             "forward",
             "endcap",
