@@ -2,6 +2,8 @@ const cfg = __CONFIG__;
 
 const MODULE_GAP_FACTOR = 0.82;
 
+const DISK_ROTATION = Math.PI / 2;
+
 const DISK_SURFACE_COLORS = {
   inner: {
     fill: "rgba(63, 132, 214, 0.09)",
@@ -63,18 +65,14 @@ function moduleAngleRange(
   moduleIndex
 ) {
   const n = ring.modules_per_half;
-
-  // Canvas angles increase clockwise.
-  //
-  // upper: pi ... 2pi
-  // lower: 0 ... pi
-  const halfStart =
-    half === "upper" ? Math.PI : 0;
+  const halfStart = half === "upper" ? Math.PI : 0;
 
   const pitch = Math.PI / n;
+
   const centre =
     halfStart +
-    (moduleIndex + 0.5) * pitch;
+    (moduleIndex + 0.5) * pitch +
+    DISK_ROTATION;
 
   const width = pitch * MODULE_GAP_FACTOR;
 
@@ -233,10 +231,10 @@ for (
 
   halfAxes.push({
     value: [
-      centre.x - cfg.outerRadius - 0.08,
-      centre.y,
-      centre.x + cfg.outerRadius + 0.08,
-      centre.y
+      centre.x,
+      centre.y - cfg.outerRadius - 0.08,
+      centre.x,
+      centre.y + cfg.outerRadius + 0.08
     ]
   });
 
