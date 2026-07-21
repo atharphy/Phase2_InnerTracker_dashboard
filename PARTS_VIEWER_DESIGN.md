@@ -9,14 +9,16 @@ selection.
 
 ## State
 
-The ECharts chart instance stores:
+The ECharts chart instance and browser local storage keep:
 
 - the current subdetector, layer/disk, and part selection;
 - the selector that is currently open;
 - the independently added detector cards;
 - a stable identifier for each card.
 
-Grafana data refreshes reuse this state. A full browser reload resets it.
+Grafana data refreshes reuse this state. The storage key includes the dashboard
+path and register, so navigation, browser reloads, and reopening the dashboard
+restore the same cards. Delete updates the saved workspace immediately.
 
 ## Geometry choices
 

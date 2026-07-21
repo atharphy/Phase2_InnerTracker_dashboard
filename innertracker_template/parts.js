@@ -6,13 +6,67 @@ const DISK_SURFACE_COLORS = {
   inner: { fill: "rgba(63, 132, 214, 0.09)", line: "rgba(100, 170, 255, 0.58)" },
   outer: { fill: "rgba(224, 145, 63, 0.08)", line: "rgba(255, 180, 95, 0.55)" }
 };
-const runtime = chart.__cmsitPartsViewer || {
+
+function partsStorageKey() {
+  const path = typeof window !== "undefined" && window.location
+    ? window.location.pathname
+    : "dashboard";
+  return "cmsit-parts-viewer:" + cfg.register + ":" + path;
+}
+
+function loadPartsRuntime() {
+  try {
+    const saved = window.localStorage.getItem(partsStorageKey());
+    if (!saved) return null;
+    const parsed = JSON.parse(saved);
+    if (!parsed || !Array.isArray(parsed.views) || !parsed.selection) return null;
+    const maximumId = parsed.views.reduce(function(maximum, view) {
+      return Math.max(maximum, Number(view.id) || 0);
+    }, 0);
+    return {
+      selection: parsed.selection,
+      views: parsed.views,
+      open: null,
+      tooltip: null,
+      returnViewId: parsed.returnViewId || null,
+      scrollY: Number(parsed.scrollY) || 0,
+      nextId: Math.max(Number(parsed.nextId) || 1, maximumId + 1)
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
+function savePartsRuntime() {
+  try {
+    window.localStorage.setItem(partsStorageKey(), JSON.stringify({
+      selection: runtime.selection,
+      views: runtime.views,
+      returnViewId: runtime.returnViewId,
+      scrollY: runtime.scrollY,
+      nextId: runtime.nextId
+    }));
+  } catch (error) {
+    return;
+  }
+}
+
+const existingRuntime = chart.__cmsitPartsViewer;
+const runtime = existingRuntime || loadPartsRuntime() || {
   selection: { subdetector: "TBPX", element: "1", part: "ladder+z+" },
   views: [],
   open: null,
+  tooltip: null,
+  returnViewId: null,
+  scrollY: 0,
   nextId: 1
 };
 chart.__cmsitPartsViewer = runtime;
+if (!existingRuntime && runtime.scrollY && typeof window !== "undefined") {
+  window.setTimeout(function() {
+    window.scrollTo(0, runtime.scrollY);
+  }, 250);
+}
 
 function fieldValue(field, index) {
   return Number(field.values.get ? field.values.get(index) : field.values[index]);
@@ -61,8 +115,11 @@ function detailUrl(meta, chip) {
     "&from=now-15m&to=now";
 }
 
-function openDetail(meta, chip) {
+function openDetail(meta, chip, viewId) {
   if (!meta || !meta.board) return;
+  runtime.returnViewId = viewId;
+  runtime.scrollY = Number(window.scrollY) || 0;
+  savePartsRuntime();
   window.location.href = detailUrl(meta, chip);
 }
 
@@ -228,6 +285,7 @@ function dropdown(id, x, label, options, selected, change) {
         z: 1000,
         onclick: function() {
           change(option.value);
+          savePartsRuntime();
           runtime.open = null;
           refresh();
         },
@@ -315,7 +373,7 @@ function barrelCard(view, width, height) {
             this.attr({ style: { fill: colorFor(chipData.value), stroke: baseStroke, lineWidth: 1, shadowBlur: 0, shadowColor: "transparent" } });
             hideTooltip();
           },
-          onclick: function() { if (chipData) openDetail(chipData, chip); }
+          onclick: function() { if (chipData) openDetail(chipData, chip, view.id); }
         });
         if (chipData) {
           children.push({
@@ -353,7 +411,7 @@ function barrelCard(view, width, height) {
           ]);
         },
         onmouseout: function() { moduleHover(this, false, "rgba(190,190,190,0.55)"); hideTooltip(); },
-        onclick: function() { openDetail(meta, "All"); },
+        onclick: function() { openDetail(meta, "All", view.id); },
         children: [
           {
             type: "rect",
@@ -469,7 +527,7 @@ function ringCard(view, width, height) {
             this.attr({ style: { fill: colorFor(chipData.value), stroke: baseStroke, lineWidth: 1, shadowBlur: 0, shadowColor: "transparent" } });
             hideTooltip();
           },
-          onclick: function() { if (chipData) openDetail(chipData, chip); }
+          onclick: function() { if (chipData) openDetail(chipData, chip, view.id); }
         });
         if (chipData) {
           const labelAngle = (chipStart + chipEnd) / 2;
@@ -510,7 +568,7 @@ function ringCard(view, width, height) {
           ]);
         },
         onmouseout: function() { moduleHover(this, false, "rgba(205,205,205,0.55)"); hideTooltip(); },
-        onclick: function() { openDetail(meta, "All"); },
+        onclick: function() { openDetail(meta, "All", view.id); },
         children: [
           {
             type: "sector",
@@ -546,6 +604,7 @@ function card(view, x, y, width, height) {
     cursor: "pointer",
     onclick: function() {
       runtime.views = runtime.views.filter(function(candidate) { return candidate.id !== view.id; });
+      savePartsRuntime();
       refresh();
     },
     children: [rect(0, 0, 68, 26, "#34262a", "#b36b73", 1, 5), text(34, 13, "Delete", 11, "bold", "center")]
@@ -576,6 +635,7 @@ function buildOption() {
     type: "group", x: 702, y: 32, cursor: "pointer",
     onclick: function() {
       runtime.views.push({ id: runtime.nextId++, subdetector: runtime.selection.subdetector, element: runtime.selection.element, part: runtime.selection.part });
+      savePartsRuntime();
       runtime.open = null;
       refresh();
     },

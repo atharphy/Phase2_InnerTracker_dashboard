@@ -86,8 +86,16 @@ The geometry mappings remain in `barrel_geometry.yaml`,
 
 ## Workspace behavior
 
-The selected-card list is held in the ECharts panel runtime. It remains while
-the dashboard is open and while monitoring data refreshes. Reloading the full
-browser page resets the workspace. Persisting a workspace across reloads would
-require serializing its selected parts into dashboard variables or browser
-storage.
+The selected-card list and current selector values are stored in browser local
+storage using the Grafana dashboard path and register as the key. Added cards
+survive monitoring refreshes, navigation to chip details, Back navigation,
+browser reloads, and reopening the Parts dashboard. A card is removed from the
+saved workspace only when its Delete control is used.
+
+Opening module or chip details also stores the current page position. Returning
+with the chip-detail Back control restores the saved cards and scrolls back to
+the same area of the Parts workspace.
+
+The saved workspace belongs to the current browser profile and Grafana origin.
+Opening the dashboard in another browser or on another computer starts with a
+separate workspace.
