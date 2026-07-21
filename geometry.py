@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, Tuple
 
 try:
     import yaml
@@ -21,7 +21,7 @@ from config import (
     ENDCAP_LAYOUT,
 )
 
-def load_yaml_mapping(filename: str) -> dict[str, Any]:
+def load_yaml_mapping(filename: str) -> Dict[str, Any]:
     path = Path(filename)
 
     if not path.exists():
@@ -63,8 +63,8 @@ def validate_hardware_key(
     return hardware_key
 
 def validate_barrel_geometry(
-    geometry: dict[str, Any],
-) -> dict[str, Any]:
+    geometry: Dict[str, Any],
+) -> Dict[str, Any]:
 
     validated = {}
 
@@ -152,10 +152,10 @@ def validate_barrel_geometry(
     return validated
 
 def validate_ring_geometry(
-    geometry: dict[str, Any],
+    geometry: Dict[str, Any],
     filename: str,
-    layout: dict[str, Any],
-) -> dict[str, Any]:
+    layout: Dict[str, Any],
+) -> Dict[str, Any]:
 
     validated = {}
 
@@ -244,10 +244,10 @@ def validate_ring_geometry(
 
     return validated
 
-def load_all_geometry() -> tuple[
-    dict[str, Any],
-    dict[str, Any],
-    dict[str, Any],
+def load_all_geometry() -> Tuple[
+    Dict[str, Any],
+    Dict[str, Any],
+    Dict[str, Any],
 ]:
 
     barrel = validate_barrel_geometry(

@@ -12,10 +12,18 @@ from config import (
 
 from geometry import load_all_geometry
 
-from panels import make_dashboard
+from panels import (
+    make_dashboard,
+    make_barrel_dashboard,
+    make_forward_dashboard,
+    make_endcap_dashboard,
+)
 
 
 def main() -> None:
+
+    output_directory = Path("json_files")
+    output_directory.mkdir(parents=True, exist_ok=True)
 
     (
         barrel_geometry,
@@ -25,26 +33,31 @@ def main() -> None:
 
     for register in REGISTERS:
 
-        dashboard = make_dashboard(
-            register,
-            barrel_geometry,
-            forward_geometry,
-            endcap_geometry,
-        )
-
-        output = (
-            f"cmsit_{register.lower()}_dashboard.json"
-        )
-
-        Path(output).write_text(
-            json.dumps(
-                dashboard,
-                indent=2,
+        dashboards = {
+            f"cmsit_{register.lower()}_dashboard.json": make_dashboard(
+                register,
+                barrel_geometry,
+                forward_geometry,
+                endcap_geometry,
             ),
-            encoding="utf-8",
-        )
+            f"cmsit_{register.lower()}_barrel_dashboard.json": (
+                make_barrel_dashboard(register, barrel_geometry)
+            ),
+            f"cmsit_{register.lower()}_forward_dashboard.json": (
+                make_forward_dashboard(register, forward_geometry)
+            ),
+            f"cmsit_{register.lower()}_endcap_dashboard.json": (
+                make_endcap_dashboard(register, endcap_geometry)
+            ),
+        }
 
-        print(f"Wrote {output}")
+        for output, dashboard in dashboards.items():
+            output_path = output_directory / output
+            output_path.write_text(
+                json.dumps(dashboard, indent=2),
+                encoding="utf-8",
+            )
+            print(f"Wrote {output_path}")
 
     print(
         "Loaded geometry files:\n"

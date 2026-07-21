@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 
 import json
+from typing import Optional
 
 from config import (
     BARREL_LAYOUT,
     BARREL_TEMPLATE,
     RING_TEMPLATE,
+    INTERACTION_TEMPLATE,
+    NAVIGATION_TEMPLATE,
+    HOVER_TEMPLATE,
     DETAILS_DASHBOARD_UID,
     DETAILS_DASHBOARD_SLUG,
     QUAD_CHIP_LAYOUT,
@@ -13,6 +17,15 @@ from config import (
 )
 
 from register_limits import REGISTER_LIMITS
+
+
+def detector_template(template: str) -> str:
+    return "\n\n".join((
+        INTERACTION_TEMPLATE,
+        NAVIGATION_TEMPLATE,
+        HOVER_TEMPLATE,
+        template,
+    ))
 
 
 def common_config(
@@ -39,11 +52,15 @@ def common_config(
 def barrel_echarts_code(
     register: str,
     geometry: dict,
+    initial_layer: Optional[int] = None,
+    isolated_geometry: bool = False,
 ) -> str:
     config = common_config(register, geometry)
     config["barrelLayout"] = BARREL_LAYOUT
+    config["initialLayer"] = initial_layer
+    config["isolatedGeometry"] = isolated_geometry
 
-    return BARREL_TEMPLATE.replace(
+    return detector_template(BARREL_TEMPLATE).replace(
         "__CONFIG__",
         json.dumps(config),
     )
@@ -57,12 +74,16 @@ def ring_echarts_code(
     layout: dict,
     region_name: str,
     detector_side: str,
+    initial_disk: Optional[int] = None,
+    isolated_geometry: bool = False,
 ) -> str:
     config = common_config(register, geometry)
 
     config["ringLayout"] = layout
     config["regionName"] = region_name
     config["detectorSide"] = detector_side
+    config["initialDisk"] = initial_disk
+    config["isolatedGeometry"] = isolated_geometry
 
     if region_name == "Forward":
         config["columns"] = 4
@@ -75,7 +96,7 @@ def ring_echarts_code(
         config["yMax"] = 6.4
         config["outerRadius"] = 2.65
 
-    return RING_TEMPLATE.replace(
+    return detector_template(RING_TEMPLATE).replace(
         "__CONFIG__",
         json.dumps(config),
     )

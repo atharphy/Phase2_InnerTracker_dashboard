@@ -148,6 +148,43 @@ def chip_variable():
     )
 
 
+def return_url_variable():
+    return {
+        "name": "return_url",
+        "type": "textbox",
+        "label": "Return URL",
+        "hide": 2,
+        "query": "/",
+        "current": {
+            "selected": True,
+            "text": "/",
+            "value": "/",
+        },
+        "options": [],
+        "skipUrlSync": False,
+    }
+
+
+def make_back_panel():
+    return {
+        "id": 1,
+        "type": "text",
+        "title": "",
+        "pluginVersion": GRAFANA_VERSION,
+        "gridPos": {
+            "x": 0,
+            "y": 0,
+            "w": 24,
+            "h": 2,
+        },
+        "options": {
+            "mode": "markdown",
+            "content": "[← Back to detector map](${return_url:raw})",
+        },
+        "transparent": True,
+    }
+
+
 def fresh_expr(register):
     value_selector = (
         "cmsit_monitor_value{"
@@ -295,17 +332,17 @@ def make_dashboard():
             "Make sure Prometheus is receiving CMSIT monitoring metrics."
         )
 
-    panels = []
+    panels = [make_back_panel()]
 
     for index, (register, unit) in enumerate(register_units.items()):
         x = 0 if index % 2 == 0 else 12
-        y = (index // 2) * 8
+        y = 2 + (index // 2) * 8
 
         panels.append(
             make_panel(
                 register=register,
                 unit=unit,
-                panel_id=index + 1,
+                panel_id=index + 2,
                 x=x,
                 y=y,
             )
@@ -341,6 +378,7 @@ def make_dashboard():
                 optical_group_variable(),
                 hybrid_variable(),
                 chip_variable(),
+                return_url_variable(),
             ]
         },
         "panels": panels,
@@ -350,7 +388,9 @@ def make_dashboard():
 def main():
     dashboard = make_dashboard()
 
-    output_path = Path(OUTPUT)
+    output_directory = Path("json_files")
+    output_directory.mkdir(parents=True, exist_ok=True)
+    output_path = output_directory / OUTPUT
     output_path.write_text(
         json.dumps(dashboard, indent=2),
         encoding="utf-8",

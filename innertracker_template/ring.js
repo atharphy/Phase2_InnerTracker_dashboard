@@ -207,11 +207,26 @@ for (const frame of context.panel.data.series) {
   }
 }
 
+const ringHardwareByModule = {};
+
+for (const [key, geom] of Object.entries(cfg.geometry)) {
+  const moduleKey = [
+    geom.detector_side,
+    geom.disk,
+    geom.ring,
+    geom.half,
+    geom.module_index
+  ].join(":");
+  ringHardwareByModule[moduleKey] = key;
+}
+
 const ringBands = [];
 const moduleSlots = [];
 const liveChips = [];
 const halfAxes = [];
 const labels = [];
+const diskTargets = [];
+const halfTargets = [];
 
 for (
   let diskNumber = 1;
@@ -220,7 +235,35 @@ for (
 ) {
   const centre = diskCentre(diskNumber);
 
+  diskTargets.push({
+    id: "disk-target-" + diskNumber,
+    value: [centre.x, centre.y, 0, cfg.outerRadius, 0, Math.PI * 2],
+    objectType: "disk",
+    disk: diskNumber,
+    detectorSide: cfg.detectorSide
+  });
+
+  for (const half of ["upper", "lower"]) {
+    halfTargets.push({
+      id: "half-target-" + diskNumber + "-" + half,
+      value: [
+        centre.x,
+        centre.y,
+        0,
+        cfg.outerRadius,
+        half === "upper" ? -Math.PI / 2 : Math.PI / 2,
+        half === "upper" ? Math.PI / 2 : Math.PI * 1.5
+      ],
+      objectType: "half",
+      disk: diskNumber,
+      half: half,
+      detectorSide: cfg.detectorSide
+    });
+  }
+
   labels.push({
+    id: "disk-label-" + diskNumber,
+    disk: diskNumber,
     value: [
       centre.x,
       centre.y + cfg.outerRadius + 0.28
@@ -230,6 +273,8 @@ for (
   });
 
   halfAxes.push({
+    id: "half-axis-" + diskNumber,
+    disk: diskNumber,
     value: [
       centre.x,
       centre.y - cfg.outerRadius - 0.08,
@@ -247,12 +292,15 @@ for (
     DISK_SURFACE_COLORS[ring.disk_surface];
 
     ringBands.push({
+    id: "ring-band-" + diskNumber + "-" + ringNumber,
     value: [
         centre.x,
         centre.y,
         ring.inner_radius,
         ring.outer_radius
     ],
+    objectType: "ring",
+    disk: diskNumber,
     ring: ringNumber,
     diskSurface: ring.disk_surface,
     itemStyle: {
@@ -273,8 +321,16 @@ for (
           half,
           moduleIndex
         );
+        const moduleHardwareKey = ringHardwareByModule[[
+          cfg.detectorSide,
+          diskNumber,
+          ringNumber,
+          half,
+          moduleIndex
+        ].join(":")];
 
         moduleSlots.push({
+          id: ["module", diskNumber, ringNumber, half, moduleIndex].join("-"),
           value: [
             centre.x,
             centre.y,
@@ -283,13 +339,15 @@ for (
             angles.start,
             angles.end
           ],
+          objectType: "module",
           disk: diskNumber,
           ring: ringNumber,
           diskSurface: ring.disk_surface,
           detectorSide: cfg.detectorSide,
           half: half,
           moduleIndex: moduleIndex,
-          moduleType: ring.module_type
+          moduleType: ring.module_type,
+          ...hardwareMetadata(moduleHardwareKey)
         });
       }
     }
@@ -350,6 +408,7 @@ for (const row of rows) {
   const centre = diskCentre(diskNumber);
 
   liveChips.push({
+    id: ["chip", diskNumber, row.hardwareKey, row.chip].join("-"),
     value: [
       centre.x,
       centre.y,
@@ -359,6 +418,7 @@ for (const row of rows) {
       sector.endAngle,
       row.value
     ],
+    objectType: "chip",
     disk: diskNumber,
     ring: ringNumber,
     diskSurface: ring.disk_surface,
@@ -381,34 +441,6 @@ for (const row of rows) {
     }
   });
 }
-
-context.panel.chart.off("click");
-
-context.panel.chart.on("click", function(params) {
-  const d = params.data;
-
-  if (!d || d.chip === undefined) {
-    return;
-  }
-
-  const url =
-    "/d/" +
-    cfg.detailsUid +
-    "/" +
-    cfg.detailsSlug +
-    "?" +
-    "var-board=" +
-    encodeURIComponent(d.board) +
-    "&var-optical_group=" +
-    encodeURIComponent(d.optical_group) +
-    "&var-hybrid=" +
-    encodeURIComponent(d.hybrid) +
-    "&var-chip=" +
-    encodeURIComponent(d.chip) +
-    "&from=now-15m&to=now";
-
-  window.location.href = url;
-});
 
 function sectorPixelShape(api) {
   const cx = api.value(0);
@@ -443,10 +475,337 @@ function sectorPixelShape(api) {
   };
 }
 
-return {
+const ringRuntime = detectorViewerRuntime(context.panel.chart);
+
+if (
+  cfg.initialDisk &&
+  ringRuntime.view.mode === DETECTOR_VIEW_MODES.OVERVIEW
+) {
+  ringRuntime.view = {
+    mode: DETECTOR_VIEW_MODES.DISK,
+    selection: {
+      disk: Number(cfg.initialDisk),
+      detectorSide: cfg.detectorSide
+    }
+  };
+  ringRuntime.history = [];
+}
+
+function ringMatchesSelection(data, view) {
+  const selection = view.selection || {};
+
+  if (selection.disk !== undefined && data.disk !== selection.disk) {
+    return false;
+  }
+  if (
+    (view.mode === DETECTOR_VIEW_MODES.HALF ||
+      view.mode === DETECTOR_VIEW_MODES.MODULE) &&
+    data.half !== undefined &&
+    data.half !== selection.half
+  ) {
+    return false;
+  }
+  if (
+    view.mode === DETECTOR_VIEW_MODES.MODULE &&
+    data.ring !== undefined &&
+    data.ring !== selection.ring
+  ) {
+    return false;
+  }
+  if (
+    view.mode === DETECTOR_VIEW_MODES.MODULE &&
+    selection.moduleIndex !== undefined &&
+    data.moduleIndex !== selection.moduleIndex
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function ringViewBounds(view) {
+  if (view.mode === DETECTOR_VIEW_MODES.OVERVIEW) {
+    return { xMin: -X_MAX, xMax: X_MAX, yMin: -Y_MAX, yMax: Y_MAX };
+  }
+
+  const selection = view.selection || {};
+  const centre = diskCentre(selection.disk);
+  let focusX = centre.x;
+  let focusY = centre.y;
+  let yRadius = cfg.outerRadius * 1.14;
+
+  if (view.mode === DETECTOR_VIEW_MODES.HALF) {
+    yRadius = cfg.outerRadius * 1.14;
+  }
+
+  if (view.mode === DETECTOR_VIEW_MODES.MODULE) {
+    const ring = cfg.ringLayout.rings[String(selection.ring)]
+      || cfg.ringLayout.rings[selection.ring];
+    const angles = moduleAngleRange(
+      ring,
+      selection.half,
+      selection.moduleIndex
+    );
+    const angle = angles.centre;
+    const radius = (ring.inner_radius + ring.outer_radius) / 2;
+    focusX += radius * Math.cos(angle);
+    focusY += radius * Math.sin(angle);
+    yRadius = Math.max(
+      cfg.outerRadius * 0.72,
+      Math.max(
+        ring.outer_radius - ring.inner_radius,
+        radius * (angles.end - angles.start)
+      ) * 2.5
+    );
+  }
+
+  const xRadius = yRadius * plotW / plotH;
+  return {
+    xMin: focusX - xRadius,
+    xMax: focusX + xRadius,
+    yMin: focusY - yRadius,
+    yMax: focusY + yRadius
+  };
+}
+
+function ringTargetSeries(name, id, data, zIndex) {
+  return {
+    id: id,
+    name: name,
+    type: "custom",
+    coordinateSystem: "cartesian2d",
+    data: data,
+    z: zIndex,
+    renderItem: function(params, api) {
+      const datum = data[params.dataIndex];
+      const shape = sectorPixelShape(api);
+      const hovered = isDetectorHovered(ringRuntime, datum);
+      const element = {
+        type: "sector",
+        shape: shape,
+        cursor: "pointer",
+        style: detectorHighlightStyle({
+          fill: hovered ? "rgba(90, 175, 255, 0.16)" : "rgba(0, 0, 0, 0.001)",
+          stroke: hovered ? "rgba(145, 210, 255, 0.98)" : "rgba(0, 0, 0, 0)",
+          lineWidth: 0
+        }, hovered)
+      };
+      return detectorTransition(element, hovered, shape.cx, shape.cy);
+    }
+  };
+}
+
+function ringDisplayPlacement(diskNumber, view) {
+  if (view.mode === DETECTOR_VIEW_MODES.OVERVIEW) {
+    return {
+      centre: diskCentre(diskNumber),
+      scale: 1
+    };
+  }
+
+  const selectedDisk = Number(view.selection.disk);
+  if (cfg.isolatedGeometry) {
+    return {
+      centre: { x: 0, y: 0 },
+      scale: 1.45
+    };
+  }
+  if (diskNumber === selectedDisk) {
+    return {
+      centre: { x: -X_MAX * 0.32, y: 0 },
+      scale: 1.45
+    };
+  }
+
+  const otherDisks = [];
+  for (
+    let candidate = 1;
+    candidate <= cfg.ringLayout.n_disks;
+    candidate++
+  ) {
+    if (candidate !== selectedDisk) {
+      otherDisks.push(candidate);
+    }
+  }
+  const index = otherDisks.indexOf(diskNumber);
+  const columns = otherDisks.length > 4 ? 2 : 1;
+  const rows = Math.ceil(otherDisks.length / columns);
+  const column = index % columns;
+  const row = Math.floor(index / columns);
+  const x = columns === 1
+    ? X_MAX * 0.68
+    : X_MAX * (0.48 + column * 0.32);
+  const yStep = 2 * Y_MAX / Math.max(1, rows);
+  const y = Y_MAX - (row + 0.5) * yStep;
+
+  return {
+    centre: { x: x, y: y },
+    scale: columns === 1 ? 0.42 : 0.34
+  };
+}
+
+function transformRingDatum(data, kind, view) {
+  if (view.mode === DETECTOR_VIEW_MODES.OVERVIEW) {
+    return data;
+  }
+
+  const source = diskCentre(data.disk);
+  const placement = ringDisplayPlacement(data.disk, view);
+  const value = data.value.slice();
+
+  if (kind === "sector") {
+    value[0] = placement.centre.x;
+    value[1] = placement.centre.y;
+    value[2] *= placement.scale;
+    value[3] *= placement.scale;
+  } else if (kind === "axis") {
+    value[0] = placement.centre.x;
+    value[1] = placement.centre.y + (value[1] - source.y) * placement.scale;
+    value[2] = placement.centre.x;
+    value[3] = placement.centre.y + (value[3] - source.y) * placement.scale;
+  } else {
+    value[0] = placement.centre.x + (value[0] - source.x) * placement.scale;
+    value[1] = placement.centre.y + (value[1] - source.y) * placement.scale;
+  }
+
+  return {
+    ...data,
+    value: value
+  };
+}
+
+function ringModuleActionSeries(data) {
+  return {
+    id: "ring-module-actions",
+    name: "Module boundaries",
+    type: "custom",
+    coordinateSystem: "cartesian2d",
+    data: data,
+    z: 35,
+    renderItem: function(params, api) {
+      const datum = data[params.dataIndex];
+      const shape = sectorPixelShape(api);
+      const hovered = isDetectorHovered(ringRuntime, datum);
+      return {
+        type: "group",
+        cursor: datum.hardwareKey ? "pointer" : "default",
+        children: [
+          {
+            type: "sector",
+            shape: shape,
+            style: {
+              fill: null,
+              stroke: "rgba(255,255,255,0.001)",
+              lineWidth: 10
+            }
+          },
+          {
+            type: "sector",
+            silent: true,
+            shape: shape,
+            style: {
+              fill: null,
+              stroke: hovered ? "#b9ddff" : "rgba(205,205,205,0.55)",
+              lineWidth: hovered ? 2.2 : 1
+            }
+          }
+        ]
+      };
+    }
+  };
+}
+
+function buildRingOption(refresh) {
+  const view = ringRuntime.view;
+  const isolatedRadius = cfg.outerRadius * 1.82;
+  const isolatedXRadius = isolatedRadius * plotW / plotH;
+  const bounds = cfg.isolatedGeometry
+    ? {
+        xMin: -isolatedXRadius,
+        xMax: isolatedXRadius,
+        yMin: -isolatedRadius,
+        yMax: isolatedRadius
+      }
+    : {
+        xMin: -X_MAX,
+        xMax: X_MAX,
+        yMin: -Y_MAX,
+        yMax: Y_MAX
+      };
+  const visibleBands = ringBands.filter(function(data) {
+    if (cfg.isolatedGeometry) {
+      return data.disk === view.selection.disk &&
+        ringMatchesSelection(data, view);
+    }
+    return view.mode === DETECTOR_VIEW_MODES.OVERVIEW ||
+      data.disk !== view.selection.disk ||
+      ringMatchesSelection(data, view);
+  }).map(function(data) {
+    return transformRingDatum(data, "sector", view);
+  });
+  const visibleModules = moduleSlots.filter(function(data) {
+    if (cfg.isolatedGeometry) {
+      return data.disk === view.selection.disk &&
+        ringMatchesSelection(data, view);
+    }
+    return view.mode === DETECTOR_VIEW_MODES.OVERVIEW ||
+      data.disk !== view.selection.disk ||
+      ringMatchesSelection(data, view);
+  }).map(function(data) {
+    return transformRingDatum(data, "sector", view);
+  });
+  const visibleChips = liveChips.filter(function(data) {
+    if (cfg.isolatedGeometry) {
+      return data.disk === view.selection.disk &&
+        ringMatchesSelection(data, view);
+    }
+    return view.mode === DETECTOR_VIEW_MODES.OVERVIEW ||
+      data.disk !== view.selection.disk ||
+      ringMatchesSelection(data, view);
+  }).map(function(data) {
+    return transformRingDatum(data, "sector", view);
+  });
+  const visibleAxes = halfAxes.filter(function(data) {
+    return !cfg.isolatedGeometry || data.disk === view.selection.disk;
+  }).map(function(data) {
+    return transformRingDatum(data, "axis", view);
+  });
+  const visibleLabels = labels.filter(function(data) {
+    return !cfg.isolatedGeometry || data.disk === view.selection.disk;
+  }).map(function(data) {
+    return transformRingDatum(data, "point", view);
+  });
+  const activeTargets = view.mode === DETECTOR_VIEW_MODES.OVERVIEW
+    ? diskTargets
+    : view.mode === DETECTOR_VIEW_MODES.DISK
+      ? diskTargets.filter(function(data) {
+          return data.disk !== view.selection.disk;
+        }).concat(halfTargets.filter(function(data) {
+          return data.disk === view.selection.disk;
+        }))
+      : diskTargets.filter(function(data) {
+          return data.disk !== view.selection.disk;
+        });
+  const isolatedTargets = cfg.isolatedGeometry
+    ? halfTargets.filter(function(data) {
+        return data.disk === view.selection.disk;
+      })
+    : activeTargets;
+  const transformedTargets = isolatedTargets.map(function(data) {
+    return transformRingDatum(data, "sector", view);
+  });
+  const graphics = navigationGraphics(
+    ringRuntime,
+    refresh,
+    cfg.regionName + " " + cfg.detectorSide
+  );
+
+
+  return {
   backgroundColor: "transparent",
 
   title: {
+    show: !cfg.isolatedGeometry,
     text:
       cfg.register +
       " " +
@@ -468,8 +827,22 @@ return {
     formatter: function(params) {
       const d = params.data;
 
-      if (!d || d.chip === undefined) {
+      if (!d) {
         return "";
+      }
+
+      if (d.objectType !== "chip") {
+        const label = d.objectType === "disk"
+          ? "Disk " + d.disk
+          : d.objectType === "half"
+            ? (d.half === "upper" ? "Right Half" : "Left Half")
+            : "Module " + d.moduleIndex;
+        const action = d.objectType === "module"
+          ? d.hardwareKey
+            ? "Click to open all module chips"
+            : "No hardware mapping for this module"
+          : "Click to inspect";
+        return "<b>" + label + "</b><br>" + action;
       }
 
       return [
@@ -505,29 +878,31 @@ return {
   grid: {
     left: 20,
     right: 20,
-    top: 55,
+    top: cfg.isolatedGeometry
+      ? 42
+      : view.mode === DETECTOR_VIEW_MODES.OVERVIEW ? 55 : 82,
     bottom: 20
   },
 
   xAxis: {
     type: "value",
-    min: -X_MAX,
-    max: X_MAX,
+    min: bounds.xMin,
+    max: bounds.xMax,
     show: false
   },
 
   yAxis: {
     type: "value",
-    min: -Y_MAX,
-    max: Y_MAX,
+    min: bounds.yMin,
+    max: bounds.yMax,
     show: false
   },
 
-  graphic: [
+  graphic: graphics.concat([
     {
       type: "group",
       right: 15,
-      top: 15,
+      bottom: 15,
       children: [
         {
           type: "rect",
@@ -603,14 +978,21 @@ return {
         }
       ]
     }
-  ],
+  ]),
+
+  animation: true,
+  animationDuration: DETECTOR_MOTION.duration,
+  animationDurationUpdate: DETECTOR_MOTION.duration,
+  animationEasing: DETECTOR_MOTION.easing,
+  animationEasingUpdate: DETECTOR_MOTION.easing,
 
   series: [
     {
+      id: "ring-backgrounds",
       name: "Ring backgrounds",
       type: "custom",
       coordinateSystem: "cartesian2d",
-      data: ringBands,
+      data: visibleBands,
       silent: true,
 
       renderItem: function(params, api) {
@@ -652,10 +1034,11 @@ return {
     },
 
     {
+      id: "ring-half-axes",
       name: "Half-disk axes",
       type: "custom",
       coordinateSystem: "cartesian2d",
-      data: halfAxes,
+      data: visibleAxes,
       silent: true,
 
       renderItem: function(params, api) {
@@ -686,15 +1069,18 @@ return {
     },
 
     {
+      id: "ring-module-slots",
       name: "Module slots",
       type: "custom",
       coordinateSystem: "cartesian2d",
-      data: moduleSlots,
-      silent: true,
+      data: visibleModules,
+      silent: false,
+      z: 25,
 
       renderItem: function(params, api) {
-        const d = moduleSlots[params.dataIndex];
+        const d = visibleModules[params.dataIndex];
         const shape = sectorPixelShape(api);
+        const hovered = isDetectorHovered(ringRuntime, d);
 
         const angleMiddle =
           (
@@ -809,29 +1195,42 @@ return {
         children.push({
           type: "sector",
           shape: shape,
-          style: {
+          style: detectorHighlightStyle({
             fill: "transparent",
-            stroke: "rgba(205,205,205,0.55)",
-            lineWidth: 1
-          }
+            stroke: hovered ? "#b9ddff" : "rgba(205,205,205,0.55)",
+            lineWidth: hovered ? 2.2 : 1
+          }, hovered)
         });
 
-        return {
+        return detectorTransition({
           type: "group",
+          cursor: d.hardwareKey ? "pointer" : "default",
           children: children
-        };
+        }, hovered, shape.cx, shape.cy);
       }
     },
 
+    ringTargetSeries(
+      "Detector navigation targets",
+      "ring-navigation-targets",
+      transformedTargets,
+      20
+    ),
+
     {
+      id: "ring-live-chips",
       name: "Live chips",
       type: "custom",
       coordinateSystem: "cartesian2d",
-      data: liveChips,
+      data: visibleChips,
+      silent: false,
+      z: 30,
 
       renderItem: function(params, api) {
+        const datum = visibleChips[params.dataIndex];
         const value = api.value(6);
         const shape = sectorPixelShape(api);
+        const hovered = isDetectorHovered(ringRuntime, datum);
 
         const radiusMiddle =
           (shape.r0 + shape.r) / 2;
@@ -850,13 +1249,18 @@ return {
           shape.cy +
           radiusMiddle * Math.sin(angleMiddle);
 
-        return {
+        return detectorTransition({
           type: "group",
+          cursor: "pointer",
           children: [
             {
               type: "sector",
               shape: shape,
-              style: api.style()
+              style: detectorHighlightStyle({
+                fill: datum.itemStyle.color,
+                stroke: hovered ? "#ffffff" : "#111111",
+                lineWidth: hovered ? 2.3 : 1
+              }, hovered)
             },
             {
               type: "text",
@@ -871,15 +1275,16 @@ return {
               }
             }
           ]
-        };
+        }, hovered, shape.cx, shape.cy);
       }
     },
 
     {
+      id: "ring-disk-labels",
       name: "Disk labels",
       type: "custom",
       coordinateSystem: "cartesian2d",
-      data: labels,
+      data: visibleLabels,
       silent: true,
 
       renderItem: function(params, api) {
@@ -888,7 +1293,7 @@ return {
           api.value(1)
         ]);
 
-        const d = labels[params.dataIndex];
+        const d = visibleLabels[params.dataIndex];
 
         return {
           type: "text",
@@ -903,6 +1308,17 @@ return {
           }
         };
       }
-    }
+    },
+
+    ringModuleActionSeries(visibleModules)
   ]
-};
+  };
+}
+
+const ringInteractions = installDetectorInteractions(
+  context.panel.chart,
+  cfg,
+  buildRingOption
+);
+
+return buildRingOption(ringInteractions.refresh);

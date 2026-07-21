@@ -92,6 +92,8 @@ def make_echarts_panel(
     panel_id: int,
     y: int,
     height: int,
+    x: int = 0,
+    width: int = 24,
     title: str,
     code: str,
     register: str,
@@ -107,9 +109,9 @@ def make_echarts_panel(
             "uid": "prometheus",
         },
         "gridPos": {
-            "x": 0,
+            "x": x,
             "y": y,
-            "w": 24,
+            "w": width,
             "h": height,
         },
         "targets": [
@@ -276,3 +278,137 @@ def make_dashboard(
         },
         "panels": panels,
     }
+
+
+def make_detector_dashboard_document(
+    register: str,
+    detector_name: str,
+    panels: list,
+):
+    dashboard_slug = register.lower().replace("_", "-")
+    detector_slug = detector_name.lower()
+    return {
+        "annotations": {"list": []},
+        "editable": True,
+        "fiscalYearStartMonth": 0,
+        "graphTooltip": 0,
+        "id": None,
+        "uid": f"cmsit-{dashboard_slug}-{detector_slug}",
+        "title": f"CMSIT {register} InnerTracker {detector_name}",
+        "tags": [
+            "cmsit",
+            "rd53",
+            register.lower(),
+            detector_slug,
+            "geometry",
+            "echarts",
+        ],
+        "timezone": "browser",
+        "schemaVersion": 41,
+        "version": 1,
+        "refresh": "5s",
+        "time": {
+            "from": "now-15m",
+            "to": "now",
+        },
+        "panels": panels,
+    }
+
+
+def make_barrel_dashboard(register: str, geometry):
+    unit = REGISTER_LIMITS.get(register, {}).get("unit", "")
+    panels = [make_limits_table(register, 1, 0)]
+    y = 4
+    for layer in range(1, 5):
+        panels.append(
+            make_echarts_panel(
+                panel_id=layer + 1,
+                y=y,
+                height=24,
+                title=f"{register} Barrel Layer {layer} [{unit}]",
+                code=barrel_echarts_code(
+                    register,
+                    geometry,
+                    initial_layer=layer,
+                    isolated_geometry=True,
+                ),
+                register=register,
+                description=f"InnerTracker Barrel Layer {layer}.",
+            )
+        )
+        y += 24
+    return make_detector_dashboard_document(
+        register,
+        "Barrel",
+        panels,
+    )
+
+
+def make_ring_dashboard(
+    register: str,
+    geometry,
+    layout: dict,
+    region_name: str,
+):
+    unit = REGISTER_LIMITS.get(register, {}).get("unit", "")
+    panels = [make_limits_table(register, 1, 0)]
+    panel_id = 2
+    disk_index = 0
+    columns = 3 if region_name == "Forward" else 2
+    panel_height = 14 if region_name == "Forward" else 16
+    panel_width = 24 // columns
+    for side in ("+z", "-z"):
+        for disk in range(1, layout["n_disks"] + 1):
+            column = disk_index % columns
+            row = disk_index // columns
+            panels.append(
+                make_echarts_panel(
+                    panel_id=panel_id,
+                    x=column * panel_width,
+                    y=4 + row * panel_height,
+                    width=panel_width,
+                    height=panel_height,
+                    title=(
+                        f"{register} {region_name} {side} "
+                        f"Disk {disk} [{unit}]"
+                    ),
+                    code=ring_echarts_code(
+                        register,
+                        geometry,
+                        layout,
+                        region_name,
+                        side,
+                        initial_disk=disk,
+                        isolated_geometry=True,
+                    ),
+                    register=register,
+                    description=(
+                        f"InnerTracker {region_name} {side} Disk {disk}."
+                    ),
+                )
+            )
+            panel_id += 1
+            disk_index += 1
+    return make_detector_dashboard_document(
+        register,
+        region_name,
+        panels,
+    )
+
+
+def make_forward_dashboard(register: str, geometry):
+    return make_ring_dashboard(
+        register,
+        geometry,
+        FORWARD_LAYOUT,
+        "Forward",
+    )
+
+
+def make_endcap_dashboard(register: str, geometry):
+    return make_ring_dashboard(
+        register,
+        geometry,
+        ENDCAP_LAYOUT,
+        "Endcap",
+    )

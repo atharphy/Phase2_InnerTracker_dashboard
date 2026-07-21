@@ -39,6 +39,9 @@ ENDCAP_GEOMETRY_FILE = "endcap_geometry.yaml"
 
 BARREL_TEMPLATE = load_template("barrel.js")
 RING_TEMPLATE = load_template("ring.js")
+INTERACTION_TEMPLATE = load_template("interaction.js")
+NAVIGATION_TEMPLATE = load_template("navigation.js")
+HOVER_TEMPLATE = load_template("hover.js")
 
 
 # TBPX geometry layout
