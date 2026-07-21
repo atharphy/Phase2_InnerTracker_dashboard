@@ -1,0 +1,23 @@
+"0/0/0":
+  layer: 3
+  signed_ladder: 1
+  z_side: "z+"
+  module_index: 1
+
+# "0/1/0":
+#   layer: 2
+#   signed_ladder: -3
+#   z_side: "z-"
+#   module_index: 2
+
+# "0/2/0":
+#   layer: 3
+#   signed_ladder: 4
+#   z_side: "z+"
+#   module_index: 3
+
+# "0/3/0":
+#   layer: 4
+#   signed_ladder: -6
+#   z_side: "z-"
+#   module_index: 4
