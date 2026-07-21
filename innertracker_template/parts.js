@@ -126,6 +126,80 @@ function refresh() {
   chart.setOption(buildOption(), { notMerge: true, lazyUpdate: false });
 }
 
+function eventPosition(event) {
+  const source = event && event.event ? event.event : event || {};
+  return {
+    x: Number(source.zrX ?? event.offsetX ?? 0),
+    y: Number(source.zrY ?? event.offsetY ?? 0)
+  };
+}
+
+function tooltipGraphic() {
+  const tooltip = runtime.tooltip;
+  const x = tooltip ? Math.min(chart.getWidth() - 290, Math.max(8, tooltip.x + 14)) : 0;
+  const y = tooltip ? Math.min(chart.getHeight() - 210, Math.max(8, tooltip.y + 14)) : 0;
+  return {
+    id: "parts-hover-tooltip",
+    type: "text",
+    z: 5000,
+    silent: true,
+    invisible: !tooltip,
+    style: {
+      x: x,
+      y: y,
+      text: tooltip ? tooltip.lines.join("\n") : "",
+      fill: "#f2f4f8",
+      font: "12px sans-serif",
+      lineHeight: 18,
+      backgroundColor: "rgba(24,28,35,0.97)",
+      borderColor: "#77869a",
+      borderWidth: 1,
+      borderRadius: 5,
+      padding: [9, 11]
+    }
+  };
+}
+
+function showTooltip(event, lines) {
+  const position = eventPosition(event);
+  runtime.tooltip = { x: position.x, y: position.y, lines: lines };
+  chart.setOption({ graphic: [tooltipGraphic()] });
+}
+
+function hideTooltip() {
+  runtime.tooltip = null;
+  chart.setOption({ graphic: [tooltipGraphic()] });
+}
+
+function chipTooltip(view, chipData, chip, locationLines) {
+  return [view.subdetector + "  " + locationLines[0]]
+    .concat(locationLines.slice(1))
+    .concat([
+      "Board: " + chipData.board,
+      "Optical group: " + chipData.optical_group,
+      "Hybrid: " + chipData.hybrid,
+      "Chip: " + chip,
+      "Register: " + cfg.register,
+      "Value: " + chipData.value.toFixed(2) + " " + (cfg.unit || ""),
+      "Click to open chip details"
+    ]);
+}
+
+function moduleHover(group, active, normalStroke) {
+  const children = group && group.children ? group.children() : [];
+  const boundary = children[1];
+  if (!boundary) return;
+  boundary.attr({
+    style: {
+      fill: null,
+      stroke: active ? "#b9ddff" : normalStroke,
+      lineWidth: active ? 2.2 : 1,
+      shadowBlur: active ? 10 : 0,
+      shadowColor: active ? "rgba(105,185,255,0.55)" : "transparent"
+    }
+  });
+}
+
 function dropdown(id, x, label, options, selected, change) {
   const width = 210;
   const children = [
@@ -213,22 +287,72 @@ function barrelCard(view, width, height) {
       Object.keys(layout).forEach(function(chip) {
         const position = layout[chip];
         const chipData = (valuesByHardware[key] || {})[chip];
+        const chipX = x + position[0] * chipWidth;
+        const chipY = y + position[1] * chipHeight;
+        const baseStroke = chipData ? "#111111" : "rgba(180,180,180,0.25)";
         children.push({
           type: "rect",
           cursor: chipData ? "pointer" : "default",
-          shape: { x: x + position[0] * chipWidth, y: y + position[1] * chipHeight, width: chipWidth, height: chipHeight },
+          shape: { x: chipX, y: chipY, width: chipWidth, height: chipHeight },
           style: {
             fill: colorFor(chipData && chipData.value),
-            stroke: chipData ? "#111111" : "rgba(180,180,180,0.25)",
+            stroke: baseStroke,
             lineWidth: 1
+          },
+          onmouseover: function(event) {
+            if (!chipData) return;
+            this.attr({ style: { fill: colorFor(chipData.value), stroke: "#ffffff", lineWidth: 2.3, shadowBlur: 12, shadowColor: "rgba(120,200,255,0.65)" } });
+            showTooltip(event, chipTooltip(view, chipData, chip, [
+              "Layer " + view.element,
+              "Quadrant: " + optionLabel(partOptionsFor("TBPX"), view.part),
+              "Signed ladder: " + signedLadder,
+              "Z side: " + (zPositive ? "+Z" : "-Z"),
+              "Module: " + moduleIndex
+            ]));
+          },
+          onmouseout: function() {
+            if (!chipData) return;
+            this.attr({ style: { fill: colorFor(chipData.value), stroke: baseStroke, lineWidth: 1, shadowBlur: 0, shadowColor: "transparent" } });
+            hideTooltip();
           },
           onclick: function() { if (chipData) openDetail(chipData, chip); }
         });
+        if (chipData) {
+          children.push({
+            type: "text",
+            silent: true,
+            style: {
+              x: chipX + chipWidth / 2,
+              y: chipY + chipHeight / 2,
+              text: chipData.value.toFixed(1),
+              fill: "#111111",
+              font: "bold " + Math.max(8, Math.min(11, chipHeight * 0.38)) + "px sans-serif",
+              textAlign: "center",
+              textVerticalAlign: "middle"
+            }
+          });
+        }
       });
       const meta = moduleMeta(key);
       children.push({
         type: "group",
         cursor: meta.board ? "pointer" : "default",
+        onmouseover: function(event) {
+          if (!meta.board) return;
+          moduleHover(this, true, "rgba(190,190,190,0.55)");
+          showTooltip(event, [
+            "TBPX  Layer " + view.element,
+            "Quadrant: " + optionLabel(partOptionsFor("TBPX"), view.part),
+            "Signed ladder: " + signedLadder,
+            "Z side: " + (zPositive ? "+Z" : "-Z"),
+            "Module: " + moduleIndex,
+            "Board: " + meta.board,
+            "Optical group: " + meta.optical_group,
+            "Hybrid: " + meta.hybrid,
+            "Click to open all module chips"
+          ]);
+        },
+        onmouseout: function() { moduleHover(this, false, "rgba(190,190,190,0.55)"); hideTooltip(); },
         onclick: function() { openDetail(meta, "All"); },
         children: [
           {
@@ -318,22 +442,74 @@ function ringCard(view, width, height) {
         const outer = ring.outer_radius - position[1] * radialWidth;
         const inner = outer - radialWidth;
         const chipData = (valuesByHardware[key] || {})[chip];
+        const baseStroke = chipData ? "#111111" : "rgba(190,190,190,0.25)";
         children.push({
           type: "sector",
           cursor: chipData ? "pointer" : "default",
           shape: { cx: cx, cy: cy, r0: inner * scale, r: outer * scale, startAngle: chipStart, endAngle: chipEnd, clockwise: true },
           style: {
             fill: colorFor(chipData && chipData.value),
-            stroke: chipData ? "#111111" : "rgba(190,190,190,0.25)",
+            stroke: baseStroke,
             lineWidth: 1
+          },
+          onmouseover: function(event) {
+            if (!chipData) return;
+            this.attr({ style: { fill: colorFor(chipData.value), stroke: "#ffffff", lineWidth: 2.3, shadowBlur: 12, shadowColor: "rgba(120,200,255,0.65)" } });
+            showTooltip(event, chipTooltip(view, chipData, chip, [
+              "Disk " + view.element,
+              "Detector side: " + side,
+              "Disk half: " + (half === "upper" ? "Right" : "Left"),
+              "Ring: " + ringKey,
+              "Module: " + moduleIndex,
+              "Disk surface: " + (ring.disk_surface === "inner" ? "Inner Disk" : "Outer Disk")
+            ]));
+          },
+          onmouseout: function() {
+            if (!chipData) return;
+            this.attr({ style: { fill: colorFor(chipData.value), stroke: baseStroke, lineWidth: 1, shadowBlur: 0, shadowColor: "transparent" } });
+            hideTooltip();
           },
           onclick: function() { if (chipData) openDetail(chipData, chip); }
         });
+        if (chipData) {
+          const labelAngle = (chipStart + chipEnd) / 2;
+          const labelRadius = (inner + outer) * scale / 2;
+          children.push({
+            type: "text",
+            silent: true,
+            style: {
+              x: cx + labelRadius * Math.cos(labelAngle),
+              y: cy + labelRadius * Math.sin(labelAngle),
+              text: chipData.value.toFixed(1),
+              fill: "#111111",
+              font: "bold 9px sans-serif",
+              textAlign: "center",
+              textVerticalAlign: "middle"
+            }
+          });
+        }
       });
       const meta = moduleMeta(key);
       children.push({
         type: "group",
         cursor: meta.board ? "pointer" : "default",
+        onmouseover: function(event) {
+          if (!meta.board) return;
+          moduleHover(this, true, "rgba(205,205,205,0.55)");
+          showTooltip(event, [
+            view.subdetector + "  Disk " + view.element,
+            "Detector side: " + side,
+            "Disk half: " + (half === "upper" ? "Right" : "Left"),
+            "Ring: " + ringKey,
+            "Module: " + moduleIndex,
+            "Disk surface: " + (ring.disk_surface === "inner" ? "Inner Disk" : "Outer Disk"),
+            "Board: " + meta.board,
+            "Optical group: " + meta.optical_group,
+            "Hybrid: " + meta.hybrid,
+            "Click to open all module chips"
+          ]);
+        },
+        onmouseout: function() { moduleHover(this, false, "rgba(205,205,205,0.55)"); hideTooltip(); },
         onclick: function() { openDetail(meta, "All"); },
         children: [
           {
@@ -423,6 +599,7 @@ function buildOption() {
     const row = Math.floor(index / columns);
     controls.push(card(view, 18 + column * (cardWidth + gap), contentTop + row * (cardHeight + gap), cardWidth, cardHeight));
   });
+  controls.push(tooltipGraphic());
   return { backgroundColor: "transparent", animationDurationUpdate: 250, animationEasingUpdate: "cubicOut", graphic: controls };
 }
 

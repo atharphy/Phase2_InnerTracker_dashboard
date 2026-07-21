@@ -32,6 +32,11 @@ Strong module
 boundaries open all module chips in the chip-detail dashboard. Individual chip
 areas open only the selected chip.
 
+Live chips display their register value inside the geometry. Hovering a live
+chip brightens its outline, adds a shadow, and shows detector position,
+hardware identifiers, chip number, register, value, and unit. Module-boundary
+hover shows the corresponding module and hardware information.
+
 ## Requirements
 
 - Python 3
