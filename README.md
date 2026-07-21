@@ -65,6 +65,16 @@ Generate the shared chip-detail dashboard separately:
 python3 generate_dashboard_chip_details.py
 ```
 
+This produces:
+
+```text
+json_files/cmsit_parts_chip_details_dashboard.json
+```
+
+Its Grafana UID is `cmsit-parts-chip-details`. Parts detector cards link to
+this UID, so it can coexist with the Interactive dashboard's
+`cmsit-chip-details` dashboard without replacing it.
+
 All JSON output is written to `json_files/`, which is created automatically.
 The geometry mappings remain in `barrel_geometry.yaml`,
 `forward_geometry.yaml`, and `endcap_geometry.yaml`.

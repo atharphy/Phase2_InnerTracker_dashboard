@@ -26,8 +26,8 @@ REGISTERS = [
     "INTERNAL_NTC_REL",
 ]
 
-DETAILS_DASHBOARD_UID = "cmsit-chip-details"
-DETAILS_DASHBOARD_SLUG = "cmsit-chip-details"
+DETAILS_DASHBOARD_UID = "cmsit-parts-chip-details"
+DETAILS_DASHBOARD_SLUG = "cmsit-parts-chip-details"
 
 
 # Geometry files ( update this to update the individual modules and there location in ring/barrel)

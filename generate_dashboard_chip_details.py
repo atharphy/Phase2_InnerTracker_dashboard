@@ -10,9 +10,9 @@ from register_limits import REGISTER_LIMITS
 
 PROMETHEUS_URL = "http://localhost:9090"
 
-OUTPUT = "cmsit_chip_details_dashboard.json"
-DASHBOARD_TITLE = "CMSIT Chip Details"
-DASHBOARD_UID = "cmsit-chip-details"
+OUTPUT = "cmsit_parts_chip_details_dashboard.json"
+DASHBOARD_TITLE = "CMSIT Parts Chip Details"
+DASHBOARD_UID = "cmsit-parts-chip-details"
 
 GRAFANA_VERSION = "13.1.0"
 PROMETHEUS_DATASOURCE_UID = "prometheus"
